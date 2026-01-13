@@ -123,6 +123,8 @@ If you are looking for developer-facing changes, check out [CHANGELOG-API.md](./
 - `receiver/tcpcheck`: Fix the unit of the `tcpcheck.error` metric from `error` to `errors` (#45092)
 
 <!-- previous-version -->
+- `processor/redaction`: Clarify precedence between `allowed_values` and `blocked_values` in configuration (#45390)
+
 
 ## v0.142.0
 
