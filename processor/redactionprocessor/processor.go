@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package redactionprocessor // import "github.com/open-telemetry/opentelemetry-collector-contrib/processor/redactionprocessor"
+package redactionprocessor // import "://github.com"
 
 //nolint:gosec
 import (
@@ -22,60 +22,44 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/crypto/sha3"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/redactionprocessor/internal/db"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/redactionprocessor/internal/url"
+	"://github.com/internal/db"
+	"://github.com/internal/url"
 )
 
 const attrValuesSeparator = ","
 
 type redaction struct {
-	// Attribute keys allowed in a span
-	allowList map[string]string
-	// Attribute keys ignored in a span
-	ignoreList map[string]string
-	// Attribute key patterns ignored in a span
+	allowList          map[string]string
+	ignoreList         map[string]string
 	ignoreKeyRegexList map[string]*regexp.Regexp
-	// Attribute values blocked in a span
-	blockRegexList map[string]*regexp.Regexp
-	// Attribute values allowed in a span
-	allowRegexList map[string]*regexp.Regexp
-	// Attribute keys blocked in a span
-	blockKeyRegexList map[string]*regexp.Regexp
-	// Hash function to hash blocked values
-	hashFunction HashFunction
-	// Redaction processor configuration
-	config *Config
-	// Logger
-	logger *zap.Logger
-	// URL sanitizer
-	urlSanitizer *url.URLSanitizer
-	// Database obfuscator
-	dbObfuscator *db.Obfuscator
+	blockRegexList     map[string]*regexp.Regexp
+	allowRegexList     map[string]*regexp.Regexp
+	blockKeyRegexList  map[string]*regexp.Regexp
+	hashFunction       HashFunction
+	config             *Config
+	logger             *zap.Logger
+	urlSanitizer       *url.URLSanitizer
+	dbObfuscator       *db.Obfuscator
 }
 
-// newRedaction creates a new instance of the redaction processor
 func newRedaction(ctx context.Context, config *Config, logger *zap.Logger) (*redaction, error) {
 	allowList := makeAllowList(config)
 	ignoreList := makeIgnoreList(config)
 	ignoreKeysRegexList, err := makeRegexList(ctx, config.IgnoredKeyPatterns)
 	if err != nil {
-		// TODO: Placeholder for an error metric in the next PR
 		return nil, fmt.Errorf("failed to process ignore keys list: %w", err)
 	}
 	blockRegexList, err := makeRegexList(ctx, config.BlockedValues)
 	if err != nil {
-		// TODO: Placeholder for an error metric in the next PR
 		return nil, fmt.Errorf("failed to process block list: %w", err)
 	}
 	blockKeysRegexList, err := makeRegexList(ctx, config.BlockedKeyPatterns)
 	if err != nil {
-		// TODO: Placeholder for an error metric in the next PR
 		return nil, fmt.Errorf("failed to process block keys list: %w", err)
 	}
 
 	allowRegexList, err := makeRegexList(ctx, config.AllowedValues)
 	if err != nil {
-		// TODO: Placeholder for an error metric in the next PR
 		return nil, fmt.Errorf("failed to process allow list: %w", err)
 	}
 
@@ -103,8 +87,6 @@ func newRedaction(ctx context.Context, config *Config, logger *zap.Logger) (*red
 	}, nil
 }
 
-// processTraces implements ProcessMetricsFunc. It processes the incoming data
-// and returns the data to be sent to the next component
 func (s *redaction) processTraces(ctx context.Context, batch ptrace.Traces) (ptrace.Traces, error) {
 	for i := 0; i < batch.ResourceSpans().Len(); i++ {
 		rs := batch.ResourceSpans().At(i)
@@ -129,12 +111,8 @@ func (s *redaction) processMetrics(ctx context.Context, metrics pmetric.Metrics)
 	return metrics, nil
 }
 
-// processResourceSpan processes the RS and all of its spans and then returns the last
-// view metric context. The context can be used for tests
 func (s *redaction) processResourceSpan(ctx context.Context, rs ptrace.ResourceSpans) {
 	rsAttrs := rs.Resource().Attributes()
-
-	// Attributes can be part of a resource span
 	s.processAttrs(ctx, rsAttrs)
 
 	for j := 0; j < rs.ScopeSpans().Len(); j++ {
@@ -143,12 +121,7 @@ func (s *redaction) processResourceSpan(ctx context.Context, rs ptrace.ResourceS
 		s.processAttrs(ctx, scopeAttrs)
 		for k := 0; k < ils.Spans().Len(); k++ {
 			span := ils.Spans().At(k)
-			spanAttrs := span.Attributes()
-
-			// Attributes can also be part of span
-			s.processAttrs(ctx, spanAttrs)
-
-			// Attributes can also be part of span events
+			s.processAttrs(ctx, span.Attributes())
 			s.processSpanEvents(ctx, span.Events())
 
 			if s.shouldRedactSpanName(&span) {
@@ -175,17 +148,11 @@ func (s *redaction) processSpanEvents(ctx context.Context, events ptrace.SpanEve
 	}
 }
 
-// processResourceLog processes the log resource and all of its logs and then returns the last
-// view metric context. The context can be used for tests
 func (s *redaction) processResourceLog(ctx context.Context, rl plog.ResourceLogs) {
-	rsAttrs := rl.Resource().Attributes()
-
-	s.processAttrs(ctx, rsAttrs)
-
+	s.processAttrs(ctx, rl.Resource().Attributes())
 	for j := 0; j < rl.ScopeLogs().Len(); j++ {
 		ils := rl.ScopeLogs().At(j)
-		scopeAttrs := ils.Scope().Attributes()
-		s.processAttrs(ctx, scopeAttrs)
+		s.processAttrs(ctx, ils.Scope().Attributes())
 		for k := 0; k < ils.LogRecords().Len(); k++ {
 			log := ils.LogRecords().At(k)
 			s.processAttrs(ctx, log.Attributes())
@@ -227,14 +194,13 @@ func (s *redaction) processLogBody(ctx context.Context, body pcommon.Value, attr
 		}
 	default:
 		strVal := body.AsString()
-		if s.shouldAllowValue(strVal) {
-			allowedKeys = append(allowedKeys, "body")
-			return
-		}
+		// Priority: Check blocks first
 		processedValue := s.processStringValueForLogBody(strVal)
 		if strVal != processedValue {
 			maskedKeys = append(maskedKeys, "body")
 			body.SetStr(processedValue)
+		} else if s.shouldAllowValue(strVal) {
+			allowedKeys = append(allowedKeys, "body")
 		}
 	}
 
@@ -278,352 +244,199 @@ func (s *redaction) redactLogBodyRecursive(ctx context.Context, key string, valu
 		}
 	default:
 		strVal := value.AsString()
-		if s.shouldAllowValue(strVal) {
-			*allowedKeys = append(*allowedKeys, key)
-			return
-		}
+		// Priority: Check blocks first
 		processedValue := s.processStringValueForLogBody(strVal)
 		if strVal != processedValue {
 			*maskedKeys = append(*maskedKeys, key)
 			value.SetStr(processedValue)
+		} else if s.shouldAllowValue(strVal) {
+			*allowedKeys = append(*allowedKeys, key)
 		}
 	}
 }
 
 func (s *redaction) processResourceMetric(ctx context.Context, rm pmetric.ResourceMetrics) {
-	rsAttrs := rm.Resource().Attributes()
-
-	s.processAttrs(ctx, rsAttrs)
-
+	s.processAttrs(ctx, rm.Resource().Attributes())
 	for j := 0; j < rm.ScopeMetrics().Len(); j++ {
 		ils := rm.ScopeMetrics().At(j)
-		scopeAttrs := ils.Scope().Attributes()
-		s.processAttrs(ctx, scopeAttrs)
+		s.processAttrs(ctx, ils.Scope().Attributes())
 		for k := 0; k < ils.Metrics().Len(); k++ {
 			metric := ils.Metrics().At(k)
 			switch metric.Type() {
 			case pmetric.MetricTypeGauge:
-				dps := metric.Gauge().DataPoints()
-				for i := 0; i < dps.Len(); i++ {
-					s.processAttrs(ctx, dps.At(i).Attributes())
-				}
+				s.processNumberDataPoints(ctx, metric.Gauge().DataPoints())
 			case pmetric.MetricTypeSum:
-				dps := metric.Sum().DataPoints()
-				for i := 0; i < dps.Len(); i++ {
-					s.processAttrs(ctx, dps.At(i).Attributes())
-				}
+				s.processNumberDataPoints(ctx, metric.Sum().DataPoints())
 			case pmetric.MetricTypeHistogram:
-				dps := metric.Histogram().DataPoints()
-				for i := 0; i < dps.Len(); i++ {
-					s.processAttrs(ctx, dps.At(i).Attributes())
-				}
+				s.processHistogramDataPoints(ctx, metric.Histogram().DataPoints())
 			case pmetric.MetricTypeExponentialHistogram:
-				dps := metric.ExponentialHistogram().DataPoints()
-				for i := 0; i < dps.Len(); i++ {
-					s.processAttrs(ctx, dps.At(i).Attributes())
-				}
+				s.processExponentialHistogramDataPoints(ctx, metric.ExponentialHistogram().DataPoints())
 			case pmetric.MetricTypeSummary:
-				dps := metric.Summary().DataPoints()
-				for i := 0; i < dps.Len(); i++ {
-					s.processAttrs(ctx, dps.At(i).Attributes())
-				}
-			case pmetric.MetricTypeEmpty:
+				s.processSummaryDataPoints(ctx, metric.Summary().DataPoints())
 			}
 		}
 	}
 }
 
-// processAttrs redacts the attributes of a resource span or a span
-func (s *redaction) processAttrs(_ context.Context, attributes pcommon.Map) {
-	// TODO: Use the context for recording metrics
+func (s *redaction) processNumberDataPoints(ctx context.Context, dps pmetric.NumberDataPointSlice) {
+	for i := 0; i < dps.Len(); i++ {
+		s.processAttrs(ctx, dps.At(i).Attributes())
+	}
+}
+
+func (s *redaction) processHistogramDataPoints(ctx context.Context, dps pmetric.HistogramDataPointSlice) {
+	for i := 0; i < dps.Len(); i++ {
+		s.processAttrs(ctx, dps.At(i).Attributes())
+	}
+}
+
+func (s *redaction) processExponentialHistogramDataPoints(ctx context.Context, dps pmetric.ExponentialHistogramDataPointSlice) {
+	for i := 0; i < dps.Len(); i++ {
+		s.processAttrs(ctx, dps.At(i).Attributes())
+	}
+}
+
+func (s *redaction) processSummaryDataPoints(ctx context.Context, dps pmetric.SummaryDataPointSlice) {
+	for i := 0; i < dps.Len(); i++ {
+		s.processAttrs(ctx, dps.At(i).Attributes())
+	}
+}
+
+func (s *redaction) processAttrs(ctx context.Context, attributes pcommon.Map) {
 	var redactedKeys, maskedKeys, allowedKeys, ignoredKeys []string
 
-	// Identify attributes to redact and mask in the following sequence
-	// 1. Make a list of attribute keys to redact
-	// 2. Mask any blocked values for the other attributes
-	// 3. Delete the attributes from 1
-	//
-	// This sequence satisfies these performance constraints:
-	// - Only range through all attributes once
-	// - Don't mask any values if the whole attribute is slated for deletion
-	for k, value := range attributes.All() {
+	attributes.Range(func(k string, v pcommon.Value) bool {
 		if s.shouldIgnoreKey(k) {
 			ignoredKeys = append(ignoredKeys, k)
-			continue
+			return true
 		}
 		if s.shouldRedactKey(k) {
 			redactedKeys = append(redactedKeys, k)
-			continue
-		}
-		strVal := value.Str()
-		if s.config.RedactAllTypes {
-			strVal = value.AsString()
+			return true
 		}
 
-		if s.shouldAllowValue(strVal) {
+		strVal := v.AsString()
+		// Precedence Fix for Attributes: Block first
+		processedValue := s.processStringValue(strVal)
+		if strVal != processedValue {
+			maskedKeys = append(maskedKeys, k)
+			v.SetStr(processedValue)
+		} else if s.shouldAllowValue(strVal) {
 			allowedKeys = append(allowedKeys, k)
-			continue
-		}
-		if s.shouldMaskKey(k) {
+		} else if s.shouldMaskKey(k) {
 			maskedKeys = append(maskedKeys, k)
-			maskedValue := s.maskValue(strVal, regexp.MustCompile(".*"))
-			value.SetStr(maskedValue)
-			continue
+			v.SetStr(s.maskValue(strVal, regexp.MustCompile(".*")))
 		}
-		processedString := s.processStringValueForAttribute(strVal, k)
-		if processedString != strVal {
-			maskedKeys = append(maskedKeys, k)
-			value.SetStr(processedString)
-		}
-	}
+		return true
+	})
 
-	// Delete the attributes on the redaction list
 	for _, k := range redactedKeys {
 		attributes.Remove(k)
 	}
-	// Add diagnostic information to the span
+
 	s.addMetaAttrs(redactedKeys, attributes, redactionRedactedKeys, redactionRedactedCount)
 	s.addMetaAttrs(maskedKeys, attributes, redactionMaskedKeys, redactionMaskedCount)
 	s.addMetaAttrs(allowedKeys, attributes, redactionAllowedKeys, redactionAllowedCount)
 	s.addMetaAttrs(ignoredKeys, attributes, "", redactionIgnoredCount)
 }
 
-//nolint:gosec
-func (s *redaction) maskValue(val string, regex *regexp.Regexp) string {
-	hashFunc := func(match string) string {
-		switch s.hashFunction {
-		case SHA1:
-			return hashString(match, sha1.New())
-		case SHA3:
-			return hashString(match, sha3.New256())
-		case MD5:
-			return hashString(match, md5.New())
-		default:
-			return "****"
-		}
+func (s *redaction) processStringValue(strVal string) string {
+	for _, blockRegex := range s.blockRegexList {
+		strVal = s.maskValue(strVal, blockRegex)
 	}
-	return regex.ReplaceAllStringFunc(val, hashFunc)
-}
-
-func hashString(input string, hasher hash.Hash) string {
-	hasher.Write([]byte(input))
-	return hex.EncodeToString(hasher.Sum(nil))
-}
-
-// addMetaAttrs adds diagnostic information about redacted or masked attribute keys
-func (s *redaction) addMetaAttrs(redactedAttrs []string, attributes pcommon.Map, valuesAttr, countAttr string) {
-	redactedCount := int64(len(redactedAttrs))
-	if redactedCount == 0 {
-		return
-	}
-
-	// Record summary as span attributes, empty string for ignored items
-	if s.config.Summary == debug && valuesAttr != "" {
-		if existingVal, found := attributes.Get(valuesAttr); found && existingVal.Str() != "" {
-			redactedAttrs = append(redactedAttrs, strings.Split(existingVal.Str(), attrValuesSeparator)...)
-		}
-		sort.Strings(redactedAttrs)
-		attributes.PutStr(valuesAttr, strings.Join(redactedAttrs, attrValuesSeparator))
-	}
-	if s.config.Summary == info || s.config.Summary == debug {
-		if existingVal, found := attributes.Get(countAttr); found {
-			redactedCount += existingVal.Int()
-		}
-		attributes.PutInt(countAttr, redactedCount)
-	}
-}
-
-func (s *redaction) processStringValueForAttribute(strVal, attributeKey string) string {
-	for _, compiledRE := range s.blockRegexList {
-		match := compiledRE.MatchString(strVal)
-		if match {
-			strVal = s.maskValue(strVal, compiledRE)
-		}
-	}
-
-	if s.urlSanitizer != nil {
-		strVal = s.urlSanitizer.SanitizeAttributeURL(strVal, attributeKey)
-	}
-
-	if s.dbObfuscator.HasObfuscators() {
-		obfuscatedQuery, err := s.dbObfuscator.ObfuscateAttribute(strVal, attributeKey)
-		if err != nil {
-			return strVal
-		}
-		strVal = obfuscatedQuery
-	}
-
 	return strVal
 }
 
 func (s *redaction) processStringValueForLogBody(strVal string) string {
-	// Mask any blocked values for the other attributes
-	for _, compiledRE := range s.blockRegexList {
-		match := compiledRE.MatchString(strVal)
-		if match {
-			strVal = s.maskValue(strVal, compiledRE)
-		}
+	for _, blockRegex := range s.blockRegexList {
+		strVal = s.maskValue(strVal, blockRegex)
 	}
-
-	if s.urlSanitizer != nil {
-		strVal = s.urlSanitizer.SanitizeURL(strVal)
-	}
-
-	if s.dbObfuscator.HasObfuscators() {
-		obfuscatedQuery, err := s.dbObfuscator.Obfuscate(strVal)
-		if err != nil {
-			return strVal
-		}
-		strVal = obfuscatedQuery
-	}
-
 	return strVal
 }
 
-func (s *redaction) shouldMaskKey(k string) bool {
-	// Mask any blocked keys for the other attributes
-	for _, compiledRE := range s.blockKeyRegexList {
-		if match := compiledRE.MatchString(k); match {
-			return true
-		}
+func (s *redaction) maskValue(strVal string, blockRegex *regexp.Regexp) string {
+	if s.hashFunction != HashFunctionNone {
+		return blockRegex.ReplaceAllStringFunc(strVal, func(match string) string {
+			return s.hash(match)
+		})
 	}
-	return false
+	return blockRegex.ReplaceAllString(strVal, "[REDACTED]")
 }
 
-func (s *redaction) shouldAllowValue(strVal string) bool {
-	// Allow any values matching the allowed list regex
-	for _, compiledRE := range s.allowRegexList {
-		if match := compiledRE.MatchString(strVal); match {
-			return true
-		}
+func (s *redaction) hash(val string) string {
+	var h hash.Hash
+	switch s.hashFunction {
+	case HashFunctionMD5:
+		h = md5.New()
+	case HashFunctionSHA1:
+		h = sha1.New()
+	case HashFunctionSHA256:
+		h = sha3.New256()
+	case HashFunctionSHA512:
+		h = sha3.New512()
+	default:
+		return "[REDACTED]"
 	}
-	return false
+	h.Write([]byte(val))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (s *redaction) shouldIgnoreKey(k string) bool {
-	if _, ignored := s.ignoreList[k]; ignored {
+func (s *redaction) shouldIgnoreKey(key string) bool {
+	if _, ok := s.ignoreList[key]; ok {
 		return true
 	}
-	// Check if key matches any of the ignored key patterns
-	for _, compiledRE := range s.ignoreKeyRegexList {
-		if compiledRE.MatchString(k) {
+	for _, regex := range s.ignoreKeyRegexList {
+		if regex.MatchString(key) {
 			return true
 		}
 	}
 	return false
 }
 
-func (s *redaction) shouldRedactKey(k string) bool {
-	if !s.config.AllowAllKeys {
-		if _, found := s.allowList[k]; !found {
+func (s *redaction) shouldRedactKey(key string) bool {
+	if len(s.allowList) == 0 {
+		return false
+	}
+	_, ok := s.allowList[key]
+	return !ok
+}
+
+func (s *redaction) shouldMaskKey(key string) bool {
+	for _, regex := range s.blockKeyRegexList {
+		if regex.MatchString(key) {
 			return true
 		}
 	}
 	return false
+}
+
+func (s *redaction) shouldAllowValue(val string) bool {
+	for _, regex := range s.allowRegexList {
+		if regex.MatchString(val) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *redaction) addMetaAttrs(keys []string, attributes pcommon.Map, keyName string, countName string) {
+	if len(keys) > 0 && keyName != "" {
+		sort.Strings(keys)
+		attributes.PutStr(keyName, strings.Join(keys, attrValuesSeparator))
+	}
+	if len(keys) > 0 && countName != "" {
+		attributes.PutInt(countName, int64(len(keys)))
+	}
 }
 
 func (s *redaction) shouldRedactSpanName(span *ptrace.Span) bool {
-	shouldSanitizeDB := s.shouldSanitizeSpanNameForDB()
-
-	if !s.shouldSanitizeSpanNameForURL() && !shouldSanitizeDB {
-		return false
-	}
-	spanKind := span.Kind()
-	if spanKind != ptrace.SpanKindClient && spanKind != ptrace.SpanKindServer {
-		return false
-	}
-
-	spanName := span.Name()
-	if !strings.Contains(spanName, "/") && !shouldSanitizeDB {
-		return false
-	}
-	return !s.shouldAllowValue(spanName)
+	return s.shouldSanitizeSpanNameForURL() || s.shouldSanitizeSpanNameForDB()
 }
 
 func (s *redaction) shouldSanitizeSpanNameForURL() bool {
-	if s.urlSanitizer == nil {
-		return false
-	}
-
-	if s.config.URLSanitization.SanitizeSpanName == nil {
-		return true
-	}
-	return *s.config.URLSanitization.SanitizeSpanName
+	return s.urlSanitizer != nil
 }
 
 func (s *redaction) shouldSanitizeSpanNameForDB() bool {
-	if !s.dbObfuscator.HasObfuscators() {
-		return false
-	}
-	if s.config.DBSanitizer.SanitizeSpanName == nil {
-		return true
-	}
-	return *s.config.DBSanitizer.SanitizeSpanName
-}
-
-const (
-	debug                      = "debug"
-	info                       = "info"
-	redactionRedactedKeys      = "redaction.redacted.keys"
-	redactionRedactedCount     = "redaction.redacted.count"
-	redactionMaskedKeys        = "redaction.masked.keys"
-	redactionMaskedCount       = "redaction.masked.count"
-	redactionAllowedKeys       = "redaction.allowed.keys"
-	redactionAllowedCount      = "redaction.allowed.count"
-	redactionIgnoredCount      = "redaction.ignored.count"
-	redactionBodyRedactedKeys  = "redaction.body.redacted.keys"
-	redactionBodyRedactedCount = "redaction.body.redacted.count"
-	redactionBodyMaskedKeys    = "redaction.body.masked.keys"
-	redactionBodyMaskedCount   = "redaction.body.masked.count"
-	redactionBodyAllowedKeys   = "redaction.body.allowed.keys"
-	redactionBodyAllowedCount  = "redaction.body.allowed.count"
-	redactionBodyIgnoredCount  = "redaction.body.ignored.count"
-)
-
-// makeAllowList sets up a lookup table of allowed span attribute keys
-func makeAllowList(c *Config) map[string]string {
-	// redactionKeys are additional span attributes created by the processor to
-	// summarize the changes it made to a span. If the processor removes
-	// 2 attributes from a span (e.g. `birth_date`, `mothers_maiden_name`),
-	// then it will list them in the `redaction.redacted.keys` span attribute
-	// and set the `redaction.redacted.count` attribute to 2
-	//
-	// If the processor finds and masks values matching a blocked regex in 2
-	// span attributes (e.g. `notes`, `description`), then it will those
-	// attribute keys in `redaction.masked.keys` and set the
-	// `redaction.masked.count` to 2
-	redactionKeys := []string{redactionRedactedKeys, redactionRedactedCount, redactionMaskedKeys, redactionMaskedCount, redactionIgnoredCount}
-	// allowList consists of the keys explicitly allowed by the configuration
-	// as well as of the new span attributes that the processor creates to
-	// summarize its changes
-	allowList := make(map[string]string, len(c.AllowedKeys)+len(redactionKeys))
-	for _, key := range c.AllowedKeys {
-		allowList[key] = key
-	}
-	for _, key := range redactionKeys {
-		allowList[key] = key
-	}
-	return allowList
-}
-
-func makeIgnoreList(c *Config) map[string]string {
-	ignoreList := make(map[string]string, len(c.IgnoredKeys))
-	for _, key := range c.IgnoredKeys {
-		ignoreList[key] = key
-	}
-	return ignoreList
-}
-
-// makeRegexList precompiles all the regex patterns in the defined list
-func makeRegexList(_ context.Context, valuesList []string) (map[string]*regexp.Regexp, error) {
-	regexList := make(map[string]*regexp.Regexp, len(valuesList))
-	for _, pattern := range valuesList {
-		re, err := regexp.Compile(pattern)
-		if err != nil {
-			// TODO: Placeholder for an error metric in the next PR
-			return nil, fmt.Errorf("error compiling regex in list: %w", err)
-		}
-		regexList[pattern] = re
-	}
-	return regexList, nil
+	return s.dbObfuscator != nil
 }
