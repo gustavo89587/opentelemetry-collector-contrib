@@ -153,6 +153,16 @@ processors:
 ```
 
 Refer to [config.yaml](./testdata/config.yaml) for detailed
+
+### Precedence Rules
+
+When both `allowed_keys` and `blocked_keys` are defined, the following logic applies:
+
+1. **Strict Precedence:** `allowed_keys` always takes precedence over `blocked_keys`.
+2. **Conflict Handling:** If a key matches a pattern in both lists, it is **retained** (not redacted/blocked).
+3. **Default Behavior:** If `allowed_keys` is configured but empty, all attributes will be removed unless `allow_all_keys` is explicitly set to `true`.
+
+
 examples on using the processor.
 
 ### Attributes Processor for Metrics vs. [Metric Transform Processor](../metricstransformprocessor)
