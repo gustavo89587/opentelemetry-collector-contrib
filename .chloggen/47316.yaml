@@ -1,0 +1,4 @@
+change_type: enhancement
+description: Add unit tests for
+allowed/blocked precedence in 
+redaction/processor
