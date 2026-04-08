@@ -1,4 +1,4 @@
 change_type: enhancement
-description: Add unit tests for
-allowed/blocked precedence in 
-redaction/processor
+component: attributesprocessor
+note: Update documentation regarding allowed/blocked precedence rules.
+issues: [47316]
