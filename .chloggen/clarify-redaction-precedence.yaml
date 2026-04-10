@@ -1,4 +1,4 @@
 change_type: enhancement
-component: redactionprocessor
+component: processor/redaction
 note: Clarify precedence rules between allowed and blocked keys for deterministic behavior.
 issues: [43826]
